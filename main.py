@@ -10,10 +10,11 @@ import numpy as np
 
 ''' Import classifier '''
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import NearestCentroid
 # NB, SVM, ANN
 
 ''' Load the data and their labels '''
-image_directory = 'Caltech Faces Dataset'
+image_directory = 'Males'
 X, y = get_images.get_images(image_directory)
 
 ''' Get distances between face landmarks in the images '''
@@ -22,7 +23,7 @@ X, y = get_landmarks.get_landmarks(X, y, 'landmarks/', 5, False)
 
 ''' Matching and Decision '''
 # create an instance of the classifier
-clf = KNeighborsClassifier()
+clf = NearestCentroid()
 
 num_correct = 0
 labels_correct = []
