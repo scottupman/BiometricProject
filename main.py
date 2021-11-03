@@ -10,11 +10,14 @@ import get_landmarks
 import numpy as np
 import pandas as pd
 import performance_plots
+
 from sklearn.multiclass import OneVsRestClassifier as ORC
 from sklearn.neighbors import KNeighborsClassifier as knn
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
 from sklearn.decomposition import PCA
 
 def getPCA(X):
@@ -54,45 +57,88 @@ def getPrePCA(X, preX):
     return newX
 
 def modelA(X, y):
-    # X_train, X_test, y_train, y_test = train_test_split(X, y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y)
     
-    # rf = SVC()
-    # rf.fit(X_train, y_train)
-    # rfPre = rf.predict(X_test)
-    # accScore = accuracy_score(y_test, rfPre) # y_test = true, rfPre = y_pred
-    # print("Accuracy: ", accScore)
+    X_train = getPCA(X_train)
+    X_test = getPCA(X_test)
     
-    X = getPCA(X)
+    accScore = 0
     
-    # train/test
-    rf = SVC()
-    rf.fit(X, y)
-    rfPre = rf.predict(X)
-    accScore = accuracy_score(y, rfPre)
-    print("Accuracy base: ", accScore)
+    # SVM
+    sv = SVC()
+    sv.fit(X_train, y_train)
+    svPre = sv.predict(X_test)
+    accScore += accuracy_score(y_test, svPre) # y_test = true, rfPre = y_pred
+    
+    
+    # Random Forest
+    rf = RandomForestClassifier()
+    rf.fit(X_train, y_train)
+    rfPre = rf.predict(X_test)
+    accScore += accuracy_score(y_test, rfPre) # y_test = true, rfPre = y_pred
+    
+    # ORC
+    orc = ORC(knn())
+    orc.fit(X_train, y_train)
+    orcPre = orc.predict(X_test)
+    accScore += accuracy_score(y_test, orcPre) # y_test = true, rfPre = y_pred
+
+    print("Accuracy: ", accScore/3)    
     
       
 def modelB(X, y, XBright, yBright):
     X = getPCA(X)
     XBright = getPCA(XBright)
     
-    # train/test
-    # rf = ORC(knn())
-    rf = SVC()
+    accScore = 0
+    
+    # SVM
+    sv = SVC()
+    sv.fit(X, y)
+    svPre = sv.predict(XBright)
+    accScore += accuracy_score(yBright, svPre)
+    
+    # Random Forest
+    rf = RandomForestClassifier()
     rf.fit(X, y)
-    rfPre = rf.predict(XBright)
-    accScore = accuracy_score(yBright, rfPre)
-    print("Accuracy (base vs bright): ", accScore)
+    rfPre = sv.predict(XBright)
+    accScore += accuracy_score(yBright, rfPre)
+    
+    # ORC 
+    orc = ORC(knn())
+    orc.fit(X, y)
+    orcPre = orc.predict(XBright)
+    accScore += accuracy_score(yBright, orcPre)
+    
+    print("Accuracy (base vs bright): ", accScore/3)
+    
+    
     
 def modelC(X, y, XDark, yDark):
     X = getPCA(X)
     XDark = getPCA(XDark)
     
-    rf = SVC()
+    accScore = 0
+    
+    # SVM
+    sv = SVC()
+    sv.fit(X, y)
+    svPre = sv.predict(XDark)
+    accScore += accuracy_score(yDark, svPre)
+    
+    # Random Forest 
+    rf = RandomForestClassifier()
     rf.fit(X, y)
     rfPre = rf.predict(XDark)
-    accScore = accuracy_score(yDark, rfPre)
-    print("Accuracy (base vs dark): ", accScore)
+    accScore += accuracy_score(yDark, rfPre)
+    
+    # ORC
+    orc = ORC(knn())
+    orc.fit(X, y)
+    orcPre = orc.predict(XDark)
+    accScore += accuracy_score(yDark, orcPre)
+    
+    print("Accuracy (base vs dark): ", accScore/3)
 
 def modelD(X, y, xBright, yBright):
      # first create grayscale/normalized datasets
@@ -109,36 +155,69 @@ def modelD(X, y, xBright, yBright):
     # xNorm, yNorm = get_landmarks.get_landmarks(xNorm, yNorm, 'landmarks/', 68, False)
     # xNoise, yNoise = get_landmarks.get_landmarks(xNoise, yNoise, 'landmarks/', 68, False)
     
+    accScore = 0
+    accScoreNorm = 0
+    accScoreNoise = 0
+    
     # xGray = getPrePCA(X, xGray)
     X = getPCA(X)
     xBright = getPCA(xBright)
     xNorm = getPCA(xNorm)
     xNoise = getPCA(xNoise)
 
-
+    # SVC
     svc = SVC()
     svc.fit(X, y)
 
-
     # test baseline vs unedited dark images
     svcPre = svc.predict(xBright)
-    accScore = accuracy_score(yBright, svcPre)
-    print("Accuracy (baseline vs dark, unedited): ", accScore, '\n')
-
-    # test baseline vs grayscale images
-    # svcPre = svc.predict(xGray)
-    # accScore = accuracy_score(yGray, svcPre)
-    # print("Accuracy (baseline vs dark, grayscale): ", accScore, '\n')
+    accScore += accuracy_score(yBright, svcPre)
 
     # test baseline vs normalized images
     svcPre = svc.predict(xNorm)
-    accScore = accuracy_score(yNorm, svcPre)
-    print("Accuracy (baseline vs dark, normalized): ", accScore, '\n')
+    accScoreNorm += accuracy_score(yNorm, svcPre)
 
     # test baseline vs sobel-filtered images
     svcPre = svc.predict(xNoise)
-    accScore = accuracy_score(yNoise, svcPre)
-    print("Accuracy (baseline vs dark, de-noised): ", accScore, '\n')
+    accScoreNoise += accuracy_score(yNoise, svcPre)
+    #------------------------------------------------
+    # Random Forest
+    rf = RandomForestClassifier()
+    rf.fit(X, y)
+
+    # test baseline vs unedited dark images
+    rfPre = rf.predict(xBright)
+    accScore += accuracy_score(yBright, rfPre)
+
+    # test baseline vs normalized images
+    svcPre = svc.predict(xNorm)
+    accScoreNorm += accuracy_score(yNorm, rfPre)
+
+    # test baseline vs sobel-filtered images
+    svcPre = svc.predict(xNoise)
+    accScoreNoise += accuracy_score(yNoise, rfPre)
+    #------------------------------------------------
+    #ORC
+    orc = ORC(knn())
+    orc.fit(X, y)
+
+    # test baseline vs unedited dark images
+    orcPre = orc.predict(xBright)
+    accScore += accuracy_score(yBright, orcPre)
+    print("Accuracy Score baseline: ", accScore/3)
+
+    # test baseline vs normalized images
+    orcPre = orc.predict(xNorm)
+    accScoreNorm += accuracy_score(yNorm, orcPre)
+    print("Accuracy Score normalize: ", accScoreNorm/3)
+
+
+    # test baseline vs sobel-filtered images
+    orcPre = orc.predict(xNoise)
+    accScoreNoise += accuracy_score(yNoise, orcPre)
+    print("Accuracy Score noise: ", accScoreNoise/3)
+
+    
 
     
 # Transferring images for xDark, yDark
@@ -157,35 +236,66 @@ def modelE(X, y, xDark, yDark):
     # xNorm, yNorm = get_landmarks.get_landmarks(xNorm, yNorm, 'landmarks/', 68, False)
     # xNoise, yNoise = get_landmarks.get_landmarks(xNoise, yNoise, 'landmarks/', 68, False)
     
+    accScore = 0
+    accScoreNorm = 0
+    accScoreNoise = 0
+    
     X = getPCA(X)
     xDark = getPCA(xDark)
     xNorm = getPCA(xNorm)
     xNoise = getPCA(xNoise)
 
+    # SVM
     svc = SVC()
     svc.fit(X, y)
 
-
     # test baseline vs unedited dark images
     svcPre = svc.predict(xDark)
-    accScore = accuracy_score(yDark, svcPre)
-    print("Accuracy (baseline vs dark, unedited): ", accScore, '\n')
-
-    # test baseline vs grayscale images
-    # svcPre = svc.predict(xGray)
-    # accScore = accuracy_score(yGray, svcPre)
-    # print("Accuracy (baseline vs dark, grayscale): ", accScore, '\n')
+    accScore += accuracy_score(yDark, svcPre)
 
     # test baseline vs normalized images
     svcPre = svc.predict(xNorm)
-    accScore = accuracy_score(yNorm, svcPre)
-    print("Accuracy (baseline vs dark, normalized): ", accScore, '\n')
+    accScoreNorm += accuracy_score(yNorm, svcPre)
 
     # test baseline vs sobel-filtered images
     svcPre = svc.predict(xNoise)
-    accScore = accuracy_score(yNoise, svcPre)
-    print("Accuracy (baseline vs dark, de-noised): ", accScore, '\n')
-    
+    accScoreNoise += accuracy_score(yNoise, svcPre)
+    #-------------------------------------------------------------
+    # Random Forest
+    rf = RandomForestClassifier()
+    rf.fit(X, y)
+
+    # test baseline vs unedited dark images
+    rfPre = rf.predict(xDark)
+    accScore += accuracy_score(yDark, rfPre)
+
+    # test baseline vs normalized images
+    rfPre = rf.predict(xNorm)
+    accScoreNorm += accuracy_score(yNorm, rfPre)
+
+    # test baseline vs sobel-filtered images
+    rfPre = rf.predict(xNoise)
+    accScoreNoise += accuracy_score(yNoise, rfPre)
+
+    #ORC
+    orc = ORC(knn())
+    orc.fit(X, y)
+
+    # test baseline vs unedited dark images
+    orcPre = orc.predict(xDark)
+    accScore += accuracy_score(yDark, orcPre)
+    print("Accuracy (baseline vs dark, unedited): ", accScore/3)
+
+    # test baseline vs normalized images
+    orcPre = orc.predict(xNorm)
+    accScoreNorm += accuracy_score(yNorm, orcPre)
+    print("Accuracy (baseline vs dark, normalized): ", accScoreNorm/3)
+
+    # test baseline vs sobel-filtered images
+    orcPre = orc.predict(xNoise)
+    accScoreNoise += accuracy_score(yNoise, orcPre)
+    print("Accuracy (baseline vs dark, de-noised): ", accScoreNoise/3)
+    #-------------------------------------------------------------    
     
     
 ''' Import classifier '''
@@ -200,19 +310,13 @@ XBright, yBright = get_images.get_bright(image_directory)
 XDark, yDark = get_images.get_dark(image_directory)
 
 
-
-
-''' Get distances between face landmarks in the images '''
-# get_landmarks(images, labels, save_directory="", num_coords=5, to_save=False)
-# X, y = get_landmarks.get_landmarks(X, y, 'landmarks/', 68, False)
-# XBright, yBright = get_landmarks.get_landmarks(XBright, yBright, 'landmarks/', 68, False)
-# XDark, yDark = get_landmarks.get_landmarks(XDark, yDark, 'landmarks/', 68, False)
-
+''' Use PCA on the images '''
 modelA(X, y)
 modelB(X, y, XBright, yBright)
 modelC(X, y, XDark, yDark)
 print()
 modelD(X, y, XBright, yBright)
+print()
 modelE(X, y, XDark, yDark)
 
 
