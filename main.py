@@ -6,7 +6,7 @@ warnings.warn = warn
 
 import cv2
 import get_images
-import get_landmarks
+# import get_landmarks
 import numpy as np
 import pandas as pd
 import performance_plots
@@ -62,83 +62,109 @@ def modelA(X, y):
     X_train = getPCA(X_train)
     X_test = getPCA(X_test)
     
-    accScore = 0
-    
     # SVM
-    sv = SVC()
+    sv = SVC(probability = True)
     sv.fit(X_train, y_train)
-    svPre = sv.predict(X_test)
-    accScore += accuracy_score(y_test, svPre) # y_test = true, rfPre = y_pred
-    
+    matching_scores_sv = sv.predict_proba(X_test)
     
     # Random Forest
     rf = RandomForestClassifier()
     rf.fit(X_train, y_train)
-    rfPre = rf.predict(X_test)
-    accScore += accuracy_score(y_test, rfPre) # y_test = true, rfPre = y_pred
+    matching_scores_rf = rf.predict_proba(X_test)
     
     # ORC
     orc = ORC(knn())
     orc.fit(X_train, y_train)
-    orcPre = orc.predict(X_test)
-    accScore += accuracy_score(y_test, orcPre) # y_test = true, rfPre = y_pred
+    matching_scores_orc = orc.predict_proba(X_test)
+    
+    # Score fusion with matching scores
+    matching_scores = (matching_scores_orc + matching_scores_rf + matching_scores_sv) / 3.0
 
-    print("Accuracy: ", accScore/3)    
+    gen_scores = []
+    imp_scores = []
+    classes = orc.classes_
+    matching_scores = pd.DataFrame(matching_scores, columns = classes)
+    
+    for i in range(len(y_test)):
+        scores = matching_scores.loc[i]
+        mask = scores.index.isin([y_test[i]])
+        gen_scores.extend(scores[mask])
+        imp_scores.extend(scores[~mask])
+        
+    performance_plots.performance(gen_scores, imp_scores, 'rf-orc-svm-score fusion (Model A)', 100)
     
       
 def modelB(X, y, XBright, yBright):
     X = getPCA(X)
     XBright = getPCA(XBright)
     
-    accScore = 0
-    
     # SVM
-    sv = SVC()
+    sv = SVC(probability = True)
     sv.fit(X, y)
-    svPre = sv.predict(XBright)
-    accScore += accuracy_score(yBright, svPre)
+    matching_scores_sv = sv.predict_proba(XBright)
     
     # Random Forest
     rf = RandomForestClassifier()
     rf.fit(X, y)
-    rfPre = sv.predict(XBright)
-    accScore += accuracy_score(yBright, rfPre)
+    matching_scores_rf = rf.predict_proba(XBright)
     
     # ORC 
     orc = ORC(knn())
     orc.fit(X, y)
-    orcPre = orc.predict(XBright)
-    accScore += accuracy_score(yBright, orcPre)
+    matching_scores_orc = orc.predict_proba(XBright)
+        
+    # Score fusion with matching scores
+    matching_scores = (matching_scores_orc + matching_scores_rf + matching_scores_sv) / 3.0
     
-    print("Accuracy (base vs bright): ", accScore/3)
+    gen_scores = []
+    imp_scores = []
+    classes = orc.classes_
+    matching_scores = pd.DataFrame(matching_scores, columns = classes)
     
+    for i in range(len(yBright)):
+        scores = matching_scores.loc[i]
+        mask = scores.index.isin([yBright[i]])
+        gen_scores.extend(scores[mask])
+        imp_scores.extend(scores[~mask])
+        
+    performance_plots.performance(gen_scores, imp_scores, 'rf-orc-svm-score fusion (Model B)', 100)
     
     
 def modelC(X, y, XDark, yDark):
     X = getPCA(X)
     XDark = getPCA(XDark)
     
-    accScore = 0
-    
     # SVM
-    sv = SVC()
+    sv = SVC(probability = True)
     sv.fit(X, y)
-    svPre = sv.predict(XDark)
-    accScore += accuracy_score(yDark, svPre)
+    matching_scores_sv = sv.predict_proba(XDark)
     
-    # Random Forest 
+    # Random Forest
     rf = RandomForestClassifier()
     rf.fit(X, y)
-    rfPre = rf.predict(XDark)
-    accScore += accuracy_score(yDark, rfPre)
+    matching_scores_rf = rf.predict_proba(XDark)
     
-    # ORC
+    # ORC 
     orc = ORC(knn())
     orc.fit(X, y)
-    orcPre = orc.predict(XDark)
-    accScore += accuracy_score(yDark, orcPre)
+    matching_scores_orc = orc.predict_proba(XDark)
+        
+    # Score fusion with matching scores
+    matching_scores = (matching_scores_orc + matching_scores_rf + matching_scores_sv) / 3.0
     
-    print("Accuracy (base vs dark): ", accScore/3)
+    gen_scores = []
+    imp_scores = []
+    classes = orc.classes_
+    matching_scores = pd.DataFrame(matching_scores, columns = classes)
+    
+    for i in range(len(yBright)):
+        scores = matching_scores.loc[i]
+        mask = scores.index.isin([yBright[i]])
+        gen_scores.extend(scores[mask])
+        imp_scores.extend(scores[~mask])
+        
+    performance_plots.performance(gen_scores, imp_scores, 'rf-orc-svm-score fusion (Model C)', 100)
+
 
 def modelD(X, y, xBright, yBright):
      # first create grayscale/normalized datasets
@@ -314,10 +340,10 @@ XDark, yDark = get_images.get_dark(image_directory)
 modelA(X, y)
 modelB(X, y, XBright, yBright)
 modelC(X, y, XDark, yDark)
-print()
-modelD(X, y, XBright, yBright)
-print()
-modelE(X, y, XDark, yDark)
+# print()
+# modelD(X, y, XBright, yBright)
+# print()
+# modelE(X, y, XDark, yDark)
 
 
 # ''' Matching and Decision '''
