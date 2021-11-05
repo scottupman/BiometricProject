@@ -6,7 +6,6 @@ warnings.warn = warn
 
 import cv2
 import get_images
-# import get_landmarks
 import numpy as np
 import pandas as pd
 import performance_plots
@@ -91,7 +90,7 @@ def modelA(X, y):
         gen_scores.extend(scores[mask])
         imp_scores.extend(scores[~mask])
         
-    performance_plots.performance(gen_scores, imp_scores, 'rf-orc-svm-score fusion (Model A)', 100)
+    performance_plots.performance(gen_scores, imp_scores, 'rf-orc-svm-score fusion for baseline', 100)
     
       
 def modelB(X, y, XBright, yBright):
@@ -127,7 +126,7 @@ def modelB(X, y, XBright, yBright):
         gen_scores.extend(scores[mask])
         imp_scores.extend(scores[~mask])
         
-    performance_plots.performance(gen_scores, imp_scores, 'rf-orc-svm-score fusion (Model B)', 100)
+    performance_plots.performance(gen_scores, imp_scores, 'rf-orc-svm-score fusion for bright', 100)
     
     
 def modelC(X, y, XDark, yDark):
@@ -157,178 +156,244 @@ def modelC(X, y, XDark, yDark):
     classes = orc.classes_
     matching_scores = pd.DataFrame(matching_scores, columns = classes)
     
-    for i in range(len(yBright)):
+    for i in range(len(yDark)):
         scores = matching_scores.loc[i]
-        mask = scores.index.isin([yBright[i]])
+        mask = scores.index.isin([yDark[i]])
         gen_scores.extend(scores[mask])
         imp_scores.extend(scores[~mask])
         
-    performance_plots.performance(gen_scores, imp_scores, 'rf-orc-svm-score fusion (Model C)', 100)
-
+    performance_plots.performance(gen_scores, imp_scores, 'rf-orc-svm-score fusion for dark', 100)
 
 def modelD(X, y, xBright, yBright):
-     # first create grayscale/normalized datasets
-    xGray, xNorm, xNoise = [], [], []
-    yGray, yNorm, yNoise = yBright, yBright, yBright
+    xContrast, xNorm, xNoise = [], [], []
+    yContrast, yNorm, yNoise = yBright, yBright, yBright
     for i in range(len(xBright)):
-        xGray.append(cv2.cvtColor(xBright[i], cv2.COLOR_BGR2GRAY))
+        imgSrc = xBright[i]
+        r_image, g_image, b_image = cv2.split(imgSrc)
+        
+        r_image_eq = cv2.equalizeHist(r_image)
+        g_image_eq = cv2.equalizeHist(g_image)
+        b_image_eq = cv2.equalizeHist(b_image)
+        
+        xContrast.append(cv2.merge((r_image_eq, g_image_eq, b_image_eq)))
+                      
         xNorm.append(cv2.normalize(xBright[i], None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U))
+        
         xNoise.append(cv2.fastNlMeansDenoisingColored(xBright[i],None, h=10))
 
-
-    # xBright, yBright = get_landmarks.get_landmarks(xBright, yBright, 'landmarks/', 68, False)
-    # xGray, yGray = get_landmarks.get_landmarks(xGray, yGray, 'landmarks/', 68, False)
-    # xNorm, yNorm = get_landmarks.get_landmarks(xNorm, yNorm, 'landmarks/', 68, False)
-    # xNoise, yNoise = get_landmarks.get_landmarks(xNoise, yNoise, 'landmarks/', 68, False)
-    
-    accScore = 0
-    accScoreNorm = 0
-    accScoreNoise = 0
-    
-    # xGray = getPrePCA(X, xGray)
     X = getPCA(X)
-    xBright = getPCA(xBright)
+    xContrast = getPCA(xContrast)
     xNorm = getPCA(xNorm)
     xNoise = getPCA(xNoise)
 
     # SVC
-    svc = SVC()
+    svc = SVC(probability=(True))
     svc.fit(X, y)
-
-    # test baseline vs unedited dark images
-    svcPre = svc.predict(xBright)
-    accScore += accuracy_score(yBright, svcPre)
+    
+    # test baseline vs contrast-equalized
+    matching_scores_svc_contrast = svc.predict_proba(xContrast)
 
     # test baseline vs normalized images
-    svcPre = svc.predict(xNorm)
-    accScoreNorm += accuracy_score(yNorm, svcPre)
+    matching_scores_svc_norm = svc.predict_proba(xNorm)
 
     # test baseline vs sobel-filtered images
-    svcPre = svc.predict(xNoise)
-    accScoreNoise += accuracy_score(yNoise, svcPre)
+    matching_scores_svc_noise = svc.predict_proba(xNoise)
+    
     #------------------------------------------------
+    
     # Random Forest
     rf = RandomForestClassifier()
     rf.fit(X, y)
 
-    # test baseline vs unedited dark images
-    rfPre = rf.predict(xBright)
-    accScore += accuracy_score(yBright, rfPre)
+    # test baseline vs contrast-equalized
+    matching_scores_rf_contrast = svc.predict_proba(xContrast)
 
     # test baseline vs normalized images
-    svcPre = svc.predict(xNorm)
-    accScoreNorm += accuracy_score(yNorm, rfPre)
+    matching_scores_rf_norm = rf.predict_proba(xNorm)
 
-    # test baseline vs sobel-filtered images
-    svcPre = svc.predict(xNoise)
-    accScoreNoise += accuracy_score(yNoise, rfPre)
+    # test baseline vs noise-filtered
+    matching_scores_rf_noise = rf.predict_proba(xNoise)
+    
     #------------------------------------------------
+    
     #ORC
     orc = ORC(knn())
     orc.fit(X, y)
-
-    # test baseline vs unedited dark images
-    orcPre = orc.predict(xBright)
-    accScore += accuracy_score(yBright, orcPre)
-    print("Accuracy Score baseline: ", accScore/3)
-
+    
+    # test baseline vs contrast-equalized
+    matching_scores_orc_contrast = svc.predict_proba(xContrast)
+    
     # test baseline vs normalized images
-    orcPre = orc.predict(xNorm)
-    accScoreNorm += accuracy_score(yNorm, orcPre)
-    print("Accuracy Score normalize: ", accScoreNorm/3)
+    matching_scores_orc_norm = orc.predict_proba(xNorm)
 
 
-    # test baseline vs sobel-filtered images
-    orcPre = orc.predict(xNoise)
-    accScoreNoise += accuracy_score(yNoise, orcPre)
-    print("Accuracy Score noise: ", accScoreNoise/3)
+    # test baseline vs noise-filtered
+    matching_scores_orc_noise = orc.predict_proba(xNoise)
+    
+    # Score fusion with matching scores
+    matching_scores_contrast = (matching_scores_orc_contrast + matching_scores_rf_contrast + matching_scores_svc_contrast) / 3.0
+    matching_scores_norm = (matching_scores_orc_norm + matching_scores_rf_norm + matching_scores_svc_norm) / 3.0
+    matching_scores_noise = (matching_scores_orc_noise + matching_scores_rf_noise + matching_scores_svc_noise) / 3.0
+    
+    # Gen and impostor for contrast
+    gen_scores_contrast = []
+    imp_scores_contrast = []
+    classes = orc.classes_
+    matching_scores_contrast = pd.DataFrame(matching_scores_contrast, columns = classes)
 
+    for i in range(len(yBright)):
+        scores = matching_scores_contrast.loc[i]
+        mask = scores.index.isin([yBright[i]])
+        gen_scores_contrast.extend(scores[mask])
+        imp_scores_contrast.extend(scores[~mask])
+
+    performance_plots.performance(gen_scores_contrast, imp_scores_contrast, 'rf-orc-svm-score fusion for contrast bright', 100)
+    
+    # Gen and impostor for norm
+    gen_scores_norm = []
+    imp_scores_norm = []
+    classes = orc.classes_
+    matching_scores_norm = pd.DataFrame(matching_scores_norm, columns = classes)
+
+    for i in range(len(yBright)):
+        scores = matching_scores_norm.loc[i]
+        mask = scores.index.isin([yBright[i]])
+        gen_scores_norm.extend(scores[mask])
+        imp_scores_norm.extend(scores[~mask])
+
+    performance_plots.performance(gen_scores_norm, imp_scores_norm, 'rf-orc-svm-score fusion for norm bright', 100)
+    
+    # Gen and impostor for noise
+    gen_scores_noise = []
+    imp_scores_noise = []
+    classes = orc.classes_
+    matching_scores_noise = pd.DataFrame(matching_scores_noise, columns = classes)
+
+    for i in range(len(yBright)):
+        scores = matching_scores_noise.loc[i]
+        mask = scores.index.isin([yBright[i]])
+        gen_scores_noise.extend(scores[mask])
+        imp_scores_noise.extend(scores[~mask])
+
+    performance_plots.performance(gen_scores_noise, imp_scores_noise, 'rf-orc-svm-score fusion for noise bright', 100)
     
 
     
 # Transferring images for xDark, yDark
-def modelE(X, y, xDark, yDark):
-    # first create grayscale/normalized datasets
-    xGray, xNorm, xNoise = [], [], []
-    yGray, yNorm, yNoise = yDark, yDark, yDark
-    for i in range(len(xDark)):
-        xGray.append(cv2.cvtColor(xDark[i], cv2.COLOR_BGR2GRAY))
+def modelE(X, y, xDark, yDark):   
+    xContrast, xNorm, xNoise = [], [], []
+    yContrast, yNorm, yNoise = yDark, yDark, yDark
+    for i in range(len(xDark)):     
+        imgSrc = xDark[i]
+        r_image, g_image, b_image = cv2.split(imgSrc)
+        
+        r_image_eq = cv2.equalizeHist(r_image)
+        g_image_eq = cv2.equalizeHist(g_image)
+        b_image_eq = cv2.equalizeHist(b_image)
+        
+        xContrast.append(cv2.merge((r_image_eq, g_image_eq, b_image_eq)))
+                      
         xNorm.append(cv2.normalize(xDark[i], None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U))
+        
         xNoise.append(cv2.fastNlMeansDenoisingColored(xDark[i],None, h=10))
         
-          
-    # xDark, yDark = get_landmarks.get_landmarks(xDark, yDark, 'landmarks/', 68, False)
-    # xGray, yGray = get_landmarks.get_landmarks(xGray, yGray, 'landmarks/', 68, False)
-    # xNorm, yNorm = get_landmarks.get_landmarks(xNorm, yNorm, 'landmarks/', 68, False)
-    # xNoise, yNoise = get_landmarks.get_landmarks(xNoise, yNoise, 'landmarks/', 68, False)
-    
-    accScore = 0
-    accScoreNorm = 0
-    accScoreNoise = 0
-    
     X = getPCA(X)
-    xDark = getPCA(xDark)
+    xContrast = getPCA(xContrast)
     xNorm = getPCA(xNorm)
     xNoise = getPCA(xNoise)
 
-    # SVM
-    svc = SVC()
+    # SVC
+    svc = SVC(probability=(True))
     svc.fit(X, y)
-
-    # test baseline vs unedited dark images
-    svcPre = svc.predict(xDark)
-    accScore += accuracy_score(yDark, svcPre)
+    
+    # test baseline vs contrast-equalized
+    matching_scores_svc_contrast = svc.predict_proba(xContrast)
 
     # test baseline vs normalized images
-    svcPre = svc.predict(xNorm)
-    accScoreNorm += accuracy_score(yNorm, svcPre)
+    matching_scores_svc_norm = svc.predict_proba(xNorm)
 
     # test baseline vs sobel-filtered images
-    svcPre = svc.predict(xNoise)
-    accScoreNoise += accuracy_score(yNoise, svcPre)
-    #-------------------------------------------------------------
+    matching_scores_svc_noise = svc.predict_proba(xNoise)
+    
+    #------------------------------------------------
+    
     # Random Forest
     rf = RandomForestClassifier()
     rf.fit(X, y)
 
-    # test baseline vs unedited dark images
-    rfPre = rf.predict(xDark)
-    accScore += accuracy_score(yDark, rfPre)
+    # test baseline vs contrast-equalized
+    matching_scores_rf_contrast = svc.predict_proba(xContrast)
 
     # test baseline vs normalized images
-    rfPre = rf.predict(xNorm)
-    accScoreNorm += accuracy_score(yNorm, rfPre)
+    matching_scores_rf_norm = rf.predict_proba(xNorm)
 
-    # test baseline vs sobel-filtered images
-    rfPre = rf.predict(xNoise)
-    accScoreNoise += accuracy_score(yNoise, rfPre)
-
+    # test baseline vs noise-filtered
+    matching_scores_rf_noise = rf.predict_proba(xNoise)
+    
+    #------------------------------------------------
+    
     #ORC
     orc = ORC(knn())
     orc.fit(X, y)
-
-    # test baseline vs unedited dark images
-    orcPre = orc.predict(xDark)
-    accScore += accuracy_score(yDark, orcPre)
-    print("Accuracy (baseline vs dark, unedited): ", accScore/3)
-
+    
+    # test baseline vs contrast-equalized
+    matching_scores_orc_contrast = svc.predict_proba(xContrast)
+    
     # test baseline vs normalized images
-    orcPre = orc.predict(xNorm)
-    accScoreNorm += accuracy_score(yNorm, orcPre)
-    print("Accuracy (baseline vs dark, normalized): ", accScoreNorm/3)
+    matching_scores_orc_norm = orc.predict_proba(xNorm)
 
-    # test baseline vs sobel-filtered images
-    orcPre = orc.predict(xNoise)
-    accScoreNoise += accuracy_score(yNoise, orcPre)
-    print("Accuracy (baseline vs dark, de-noised): ", accScoreNoise/3)
-    #-------------------------------------------------------------    
+
+    # test baseline vs noise-filtered images
+    matching_scores_orc_noise = orc.predict_proba(xNoise)
+    
+    # Score fusion with matching scores
+    matching_scores_contrast = (matching_scores_orc_contrast + matching_scores_rf_contrast + matching_scores_svc_contrast) / 3.0
+    matching_scores_norm = (matching_scores_orc_norm + matching_scores_rf_norm + matching_scores_svc_norm) / 3.0
+    matching_scores_noise = (matching_scores_orc_noise + matching_scores_rf_noise + matching_scores_svc_noise) / 3.0
+    
+    # Gen and impostor for contrast
+    gen_scores_contrast = []
+    imp_scores_contrast = []
+    classes = orc.classes_
+    matching_scores_contrast = pd.DataFrame(matching_scores_contrast, columns = classes)
+
+    for i in range(len(yBright)):
+        scores = matching_scores_contrast.loc[i]
+        mask = scores.index.isin([yBright[i]])
+        gen_scores_contrast.extend(scores[mask])
+        imp_scores_contrast.extend(scores[~mask])
+
+    performance_plots.performance(gen_scores_contrast, imp_scores_contrast, 'rf-orc-svm-score fusion for contrast dark', 100)
+    
+    # Gen and impostor for norm
+    gen_scores_norm = []
+    imp_scores_norm = []
+    classes = orc.classes_
+    matching_scores_norm = pd.DataFrame(matching_scores_norm, columns = classes)
+
+    for i in range(len(yBright)):
+        scores = matching_scores_norm.loc[i]
+        mask = scores.index.isin([yBright[i]])
+        gen_scores_norm.extend(scores[mask])
+        imp_scores_norm.extend(scores[~mask])
+
+    performance_plots.performance(gen_scores_norm, imp_scores_norm, 'rf-orc-svm-score fusion for norm dark', 100)
+    
+    # Gen and impostor for noise
+    gen_scores_noise = []
+    imp_scores_noise = []
+    classes = orc.classes_
+    matching_scores_noise = pd.DataFrame(matching_scores_noise, columns = classes)
+
+    for i in range(len(yBright)):
+        scores = matching_scores_noise.loc[i]
+        mask = scores.index.isin([yBright[i]])
+        gen_scores_noise.extend(scores[mask])
+        imp_scores_noise.extend(scores[~mask])
+
+    performance_plots.performance(gen_scores_noise, imp_scores_noise, 'rf-orc-svm-score fusion for noise dark', 100)  
     
     
-''' Import classifier '''
-# from sklearn.neighbors import KNeighborsClassifier
-# from sklearn.svm import SVC
-# NB, SVM, ANN
-
 ''' Load the data and their labels '''
 image_directory = 'Project 1 Database'
 X, y = get_images.get_images(image_directory)
@@ -340,49 +405,9 @@ XDark, yDark = get_images.get_dark(image_directory)
 modelA(X, y)
 modelB(X, y, XBright, yBright)
 modelC(X, y, XDark, yDark)
-# print()
-# modelD(X, y, XBright, yBright)
-# print()
-# modelE(X, y, XDark, yDark)
+modelD(X, y, XBright, yBright)
+modelE(X, y, XDark, yDark)
 
-
-# ''' Matching and Decision '''
-#     # create an instance of the classifier
-#     clf = SVC()
-    
-#     num_correct = 0
-#     labels_correct = []
-#     num_incorrect = 0
-#     labels_incorrect = []
-    
-#     for i in range(0, len(y)):
-#         query_img = X[i, :]
-#         query_label = y[i]
-        
-#         template_imgs = np.delete(X, i, 0)
-#         template_labels = np.delete(y, i)
-            
-#         # Set the appropriate labels
-#         # 1 is genuine, 0 is impostor
-#         y_hat = np.zeros(len(template_labels))
-#         y_hat[template_labels == query_label] = 1 
-#         y_hat[template_labels != query_label] = 0
-        
-#         clf.fit(template_imgs, y_hat) # Train the classifier
-#         y_pred = clf.predict(query_img.reshape(1,-1)) # Predict the label of the query
-        
-#         # Gather results
-#         if y_pred == 1:
-#             num_correct += 1
-#             labels_correct.append(query_label)
-#         else:
-#             num_incorrect += 1
-#             labels_incorrect.append(query_label)
-
-#     # Print results
-#     print()
-#     print("Num correct = %d, Num incorrect = %d, Accuracy = %0.2f" 
-#           % (num_correct, num_incorrect, num_correct/(num_correct+num_incorrect))) 
 
 
  
