@@ -19,47 +19,33 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 
-def getPCA(X):
+def getPCA(X_train, X_test):
     # PCA
-    npX = np.array(X)
-        
+    npX = np.array(X_train)
+    npY = np.array(X_test)
+
     n, nx, ny, nz = npX.shape
     newX = npX.reshape((n,nx*ny*nz))
-    
+
+    n, nx, ny, nz = npY.shape
+    newY = npY.reshape((n,nx*ny*nz))
+
     pca = PCA(n_components=0.8)
     pca.fit(newX)
 
     dimX = pca.transform(newX)
-    X = pca.inverse_transform(dimX)
-    
-    return X
 
-def getPrePCA(X, preX):
-    # PCA
-    npX = np.array(X)
-        
-    n, nx, ny, nz = npX.shape
-    newX = npX.reshape((n,nx*ny*nz))
-    
-    pca = PCA(n_components=0.8)
-    pca.fit(newX)
-    
-    # data to return
-    newNPX = np.array(preX)
-        
-    n, nx, ny = newNPX.shape
-    preX = newNPX.reshape((n,nx*ny))
+    dimY = pca.transform(newY)
 
-    dimX = pca.transform(preX)
-    newX = pca.inverse_transform(dimX)
-    
-    return newX
+    # X = pca.inverse_transform(dimX)
+
+    return dimX, dimY
+
 
 def modelA(X, y):
     X_train, X_test, y_train, y_test = train_test_split(X, y)
     
-    X_train = getPCA(X_train)
-    X_test = getPCA(X_test)
+    X_train, X_test = getPCA(X_train, X_test)
     
     # SVM
     sv = SVC(probability = True)
@@ -94,8 +80,7 @@ def modelA(X, y):
     
       
 def modelB(X, y, XBright, yBright):
-    X = getPCA(X)
-    XBright = getPCA(XBright)
+    X, XBright = getPCA(X, XBright)
     
     # SVM
     sv = SVC(probability = True)
@@ -130,8 +115,7 @@ def modelB(X, y, XBright, yBright):
     
     
 def modelC(X, y, XDark, yDark):
-    X = getPCA(X)
-    XDark = getPCA(XDark)
+    X, XDark = getPCA(X, XDark)
     
     # SVM
     sv = SVC(probability = True)
@@ -181,14 +165,13 @@ def modelD(X, y, xBright, yBright):
         
         xNoise.append(cv2.fastNlMeansDenoisingColored(xBright[i],None, h=10))
 
-    X = getPCA(X)
-    xContrast = getPCA(xContrast)
-    xNorm = getPCA(xNorm)
-    xNoise = getPCA(xNoise)
+    X1, xContrast = getPCA(X, xContrast)
+    X2, xNorm = getPCA(X, xNorm)
+    X3, xNoise = getPCA(X, xNoise)
 
     # SVC
     svc = SVC(probability=(True))
-    svc.fit(X, y)
+    svc.fit(X1, y)
     
     # test baseline vs contrast-equalized
     matching_scores_svc_contrast = svc.predict_proba(xContrast)
@@ -196,14 +179,14 @@ def modelD(X, y, xBright, yBright):
     # test baseline vs normalized images
     matching_scores_svc_norm = svc.predict_proba(xNorm)
 
-    # test baseline vs sobel-filtered images
+    # test baseline vs noise-filtered images
     matching_scores_svc_noise = svc.predict_proba(xNoise)
     
     #------------------------------------------------
     
     # Random Forest
     rf = RandomForestClassifier()
-    rf.fit(X, y)
+    rf.fit(X1, y)
 
     # test baseline vs contrast-equalized
     matching_scores_rf_contrast = svc.predict_proba(xContrast)
@@ -218,7 +201,7 @@ def modelD(X, y, xBright, yBright):
     
     #ORC
     orc = ORC(knn())
-    orc.fit(X, y)
+    orc.fit(X1, y)
     
     # test baseline vs contrast-equalized
     matching_scores_orc_contrast = svc.predict_proba(xContrast)
@@ -297,14 +280,12 @@ def modelE(X, y, xDark, yDark):
         
         xNoise.append(cv2.fastNlMeansDenoisingColored(xDark[i],None, h=10))
         
-    X = getPCA(X)
-    xContrast = getPCA(xContrast)
-    xNorm = getPCA(xNorm)
-    xNoise = getPCA(xNoise)
-
+    X1, xContrast = getPCA(X, xContrast)
+    X2, xNorm = getPCA(X, xNorm)
+    X3, xNoise = getPCA(X, xNoise)
     # SVC
     svc = SVC(probability=(True))
-    svc.fit(X, y)
+    svc.fit(X1, y)
     
     # test baseline vs contrast-equalized
     matching_scores_svc_contrast = svc.predict_proba(xContrast)
@@ -319,7 +300,7 @@ def modelE(X, y, xDark, yDark):
     
     # Random Forest
     rf = RandomForestClassifier()
-    rf.fit(X, y)
+    rf.fit(X1, y)
 
     # test baseline vs contrast-equalized
     matching_scores_rf_contrast = svc.predict_proba(xContrast)
@@ -334,7 +315,7 @@ def modelE(X, y, xDark, yDark):
     
     #ORC
     orc = ORC(knn())
-    orc.fit(X, y)
+    orc.fit(X1, y)
     
     # test baseline vs contrast-equalized
     matching_scores_orc_contrast = svc.predict_proba(xContrast)
